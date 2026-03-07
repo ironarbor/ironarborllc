@@ -1,0 +1,14 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "ironarborllc",
+  "compatibility_date": "2025-09-27",
+  "observability": {
+    "enabled": true
+  },
+  "assets": {
+    "directory": "iron-arbor-advisory-main"
+  },
+  "compatibility_flags": [
+    "nodejs_compat"
+  ]
+}
