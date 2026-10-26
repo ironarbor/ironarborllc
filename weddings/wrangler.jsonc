@@ -1,6 +1,15 @@
 {
-  "$schema": "https://raw.githubusercontent.com/cloudflare/workers-sdk/main/packages/wrangler/config-schema.json",
   "name": "iron-arbor-weddings",
   "compatibility_date": "2026-10-26",
-  "assets": { "directory": "./public", "not_found_handling": "404-page" }
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "pages_build_output_dir": "./public",
+  "d1_databases": [
+    {
+      "binding": "RSVP_DB",
+      "database_name": "iron-arbor-wedding-rsvps",
+      "database_id": "83ec98bb-d056-4925-aabe-621604704460"
+    }
+  ]
 }
