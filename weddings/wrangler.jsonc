@@ -1,0 +1,6 @@
+{
+  "$schema": "https://raw.githubusercontent.com/cloudflare/workers-sdk/main/packages/wrangler/config-schema.json",
+  "name": "iron-arbor-weddings",
+  "compatibility_date": "2026-10-26",
+  "assets": { "directory": "./public", "not_found_handling": "404-page" }
+}
