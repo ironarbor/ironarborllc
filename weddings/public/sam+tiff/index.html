@@ -43,6 +43,7 @@ header{background:var(--navy);color:#f6f1e7}nav{display:flex;justify-content:spa
 @media(prefers-reduced-motion:reduce){.envelope-flap,.envelope-insert,.wax-seal{transition:none}.invitation-gate.opening{animation:none}}
 
 .hotel.airports p,.hotel.airports .hotel-detail{font-size:14px}footer a.footer-brand{color:#1f4b36;text-decoration:underline;text-underline-offset:4px}footer a.footer-brand:hover{color:#123522}
+.name-row{display:grid;grid-template-columns:1fr 1fr;gap:16px}.form fieldset{border:1px solid #dedcd5;padding:16px;margin:0 0 22px;min-width:0}.form legend{font:400 20px Georgia,serif;padding:0 7px}.form .guest-entry{margin-top:18px}.form .guest-entry legend{font:600 13px Arial,sans-serif}.guest-button,.guest-remove{font:600 12px Arial,sans-serif;padding:10px 14px;border:1px solid #143baa;background:transparent;color:#143baa;cursor:pointer}.guest-button:disabled{opacity:.5;cursor:default}.guest-remove{border:0;padding:0;text-decoration:underline;text-underline-offset:3px}.optional{font-weight:400}.form #guest-list .field{margin-bottom:12px}@media(max-width:480px){.name-row{grid-template-columns:1fr;gap:0}.form fieldset{padding:12px}}
 </style>
 </head>
 <body>
@@ -161,12 +162,14 @@ detail();new ResizeObserver(draw).observe(root.querySelector('.wm-map'));draw();
 </div></section>
 <section class="section rsvp-section" id="rsvp" aria-labelledby="rsvp-heading"><div class="wrap rsvp-layout"><div><p class="section-label">Your reply</p><h2 id="rsvp-heading">Kindly RSVP.</h2><p class="lead">Please let us know whether you will be joining the celebration. Due to limited venue capacity, please respond only for the guests named on your invitation.</p><p class="rsvp-sub">We look forward to sharing<br>this occasion with you.</p></div>
 <form class="form" id="rsvp-form" action="/api/sam-tiff-rsvp" method="post">
-<div class="field"><label for="contact-name">Your full name</label><input id="contact-name" name="contactName" autocomplete="name" maxlength="160" required></div>
+<div class="name-row"><div class="field"><label for="first-name">First name</label><input id="first-name" name="firstName" autocomplete="given-name" maxlength="80" required></div><div class="field"><label for="last-name">Last name</label><input id="last-name" name="lastName" autocomplete="family-name" maxlength="80" required></div></div>
 <div class="field"><label for="email">Email address</label><input id="email" type="email" name="email" autocomplete="email" maxlength="254" required></div>
+<div class="field"><label for="cell-number">Cell number</label><input id="cell-number" type="tel" name="cellNumber" autocomplete="tel" maxlength="35" inputmode="tel" aria-describedby="cell-hint" required><span class="hint" id="cell-hint">Include your country code if outside the U.S.</span></div>
 <div class="field"><label for="attendance">Will you attend?</label><select id="attendance" name="attendance" required><option value="">Please select</option><option value="yes">Accepts with pleasure</option><option value="no">Declines with regret</option></select></div>
-<div id="attending-fields" hidden><div class="field"><label for="guest-count">Number attending, including yourself</label><input id="guest-count" type="number" name="guestCount" min="1" max="20" step="1" inputmode="numeric" value="1"></div><div class="field"><label for="guest-names">Full names of all guests attending</label><textarea id="guest-names" name="guestNames" maxlength="1200" aria-describedby="guest-hint"></textarea><span class="hint" id="guest-hint">Please include only those named on your invitation.</span></div></div>
+<fieldset id="attending-fields" hidden disabled><legend>Additional invited guests</legend><p class="hint">Your name is already included. Add only guests named on your invitation, up to six additional guests.</p><div id="guest-list"></div><button class="guest-button" id="add-guest" type="button">+ Add guest</button><p class="hint" id="guest-total" role="status">Total attending: 1</p></fieldset>
+<div class="field"><label for="rsvp-note">Note <span class="optional">(optional)</span></label><textarea id="rsvp-note" name="note" maxlength="2000" rows="3"></textarea></div>
 <div class="trap" aria-hidden="true"><label for="website">Website</label><input id="website" name="website" autocomplete="off" tabindex="-1"></div>
-<p class="privacy">Your response will be used by the couple and their wedding coordinator to plan the celebration. Guest responses are not displayed publicly.</p>
+<p class="privacy">Your response will be used by the couple and their wedding coordinator to plan the celebration. Guest responses are not displayed on this website.</p>
 <button class="button" id="submit-rsvp" type="submit">Submit RSVP</button><div id="rsvp-feedback" role="status" aria-live="polite" tabindex="-1" hidden></div>
 <noscript><p class="hint">Please enable JavaScript to submit your response online.</p></noscript>
 </form></div></section>
@@ -178,10 +181,28 @@ detail();new ResizeObserver(draw).observe(root.querySelector('.wm-map'));draw();
 const gate=document.getElementById('invitation-gate'),content=document.getElementById('wedding-content'),seal=document.getElementById('open-invitation');
 gate.hidden=false;content.hidden=true;
 seal.addEventListener('click',()=>{seal.disabled=true;seal.setAttribute('aria-expanded','true');gate.classList.add('opening');const reduced=window.matchMedia('(prefers-reduced-motion: reduce)').matches;window.setTimeout(()=>{gate.hidden=true;content.hidden=false;const destination=document.getElementById(location.hash.slice(1));if(destination){destination.scrollIntoView();}else{window.scrollTo(0,0);}document.getElementById('couple').focus({preventScroll:true});},reduced?0:1150);});
-const form=document.getElementById('rsvp-form'),attendance=document.getElementById('attendance'),fields=document.getElementById('attending-fields'),count=document.getElementById('guest-count'),names=document.getElementById('guest-names'),feedback=document.getElementById('rsvp-feedback'),submit=document.getElementById('submit-rsvp');
-function updateAttendance(){const yes=attendance.value==='yes';fields.hidden=!yes;count.required=yes;names.required=yes;count.disabled=!yes;names.disabled=!yes;}
+const form=document.getElementById('rsvp-form'),attendance=document.getElementById('attendance'),fields=document.getElementById('attending-fields'),guestList=document.getElementById('guest-list'),addGuest=document.getElementById('add-guest'),guestTotal=document.getElementById('guest-total'),feedback=document.getElementById('rsvp-feedback'),submit=document.getElementById('submit-rsvp');
+let guestSequence=0;
+function updateGuestSummary(){const total=guestList.children.length;addGuest.disabled=total>=6;guestTotal.textContent='Total attending: '+(total+1)+(total>=6?' — maximum of six additional guests reached.':'');}
+function updateAttendance(){const yes=attendance.value==='yes';fields.hidden=!yes;fields.disabled=!yes;updateGuestSummary();}
+addGuest.addEventListener('click',()=>{
+ if(guestList.children.length>=6)return;
+ const key=++guestSequence,group=document.createElement('fieldset');group.className='guest-entry';
+ group.innerHTML='<legend>Guest</legend><div class="name-row"><div class="field"><label for="guest-first-'+key+'">First name</label><input id="guest-first-'+key+'" data-guest-first autocomplete="off" maxlength="80" required></div><div class="field"><label for="guest-last-'+key+'">Last name</label><input id="guest-last-'+key+'" data-guest-last autocomplete="off" maxlength="80" required></div></div><button type="button" class="guest-remove">Remove guest</button>';
+ group.querySelector('button').addEventListener('click',()=>{group.remove();renumberGuests();updateGuestSummary();addGuest.focus();});
+ guestList.append(group);renumberGuests();updateGuestSummary();group.querySelector('input').focus();
+});
+function renumberGuests(){[...guestList.children].forEach((group,i)=>{group.querySelector('legend').textContent='Guest '+(i+1);group.querySelector('button').setAttribute('aria-label','Remove guest '+(i+1));});}
 attendance.addEventListener('change',updateAttendance);updateAttendance();
-form.addEventListener('submit',async(event)=>{event.preventDefault();if(!form.reportValidity())return;submit.disabled=true;submit.textContent='Submitting…';feedback.hidden=true;try{const data=Object.fromEntries(new FormData(form));data.guestCount=data.attendance==='yes'?Number(data.guestCount):0;const response=await fetch(form.action,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});const result=await response.json();if(!response.ok||!result.ok)throw new Error(result.error||'We could not save your response. Please try again in a few minutes.');feedback.className='feedback';feedback.textContent='Thank you. Your RSVP has been received.';form.reset();updateAttendance();}catch(error){feedback.className='feedback error';feedback.textContent=error.message||'Please try again in a few minutes.';}finally{feedback.hidden=false;feedback.focus();submit.disabled=false;submit.textContent='Submit RSVP';}});
+form.addEventListener('submit',async(event)=>{
+ event.preventDefault();if(!form.reportValidity())return;
+ const data=Object.fromEntries(new FormData(form));
+ data.guests=data.attendance==='yes'?[...guestList.children].map(group=>({firstName:group.querySelector('[data-guest-first]').value,lastName:group.querySelector('[data-guest-last]').value})):[];
+ submit.disabled=true;submit.textContent='Submitting…';feedback.hidden=true;
+ try{const response=await fetch(form.action,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});const result=await response.json();if(!response.ok||!result.ok)throw new Error(result.error||'We could not save your response. Please try again in a few minutes.');feedback.className='feedback';feedback.textContent='Thank you. Your RSVP has been received.';form.reset();guestList.replaceChildren();updateAttendance();}
+ catch(error){feedback.className='feedback error';feedback.textContent=error.message||'Please try again in a few minutes.';}
+ finally{feedback.hidden=false;feedback.focus();submit.disabled=false;submit.textContent='Submit RSVP';}
+});
 </script>
 </body>
 </html>
