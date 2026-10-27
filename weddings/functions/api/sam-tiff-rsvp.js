@@ -1,5 +1,36 @@
 const HEADERS = {'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'};
 const reply = (body,status=200) => new Response(JSON.stringify(body),{status,headers:HEADERS});
+
+// Google Form is linked to the private Website RSVPs tab in the master tracker.
+// Keep these question IDs aligned with that form; no Google credentials enter the browser.
+const RESPONSE_URL = 'https://docs.google.com/forms/d/e/1FAIpQLScEhFgEdSGnqANyNJZe5dDq8UifIk-bALBCSLJmfc5NTouHQw/formResponse';
+const sheetText = value => /^[=+@-]/.test(value.trimStart()) ? "'" + value : value;
+async function syncToTracker(db, row) {
+  const body = new URLSearchParams({
+    'entry.229431896': sheetText(row.email),
+    'entry.369864039': row.attendance === 'yes' ? 'Accepts with pleasure' : 'Declines with regret',
+    'entry.524959291': String(row.guest_count),
+    'entry.596165169': sheetText(row.guest_names),
+    'entry.793509066': row.id,
+    'entry.1207398236': sheetText(row.contact_name),
+    'fvv': '1', 'pageHistory': '0'
+  });
+  const response = await fetch(RESPONSE_URL, {
+    method: 'POST', body,
+    signal: AbortSignal.timeout(12000)
+  });
+  const confirmation = await response.text();
+  if (!response.ok || !confirmation.includes('Your response has been recorded.')) throw new Error('Tracker delivery was not confirmed');
+  await db.prepare("UPDATE rsvps SET sheet_synced_at = strftime('%Y-%m-%dT%H:%M:%SZ','now') WHERE id = ?").bind(row.id).run();
+}
+async function retryPending(db, currentId) {
+  const pending = await db.prepare('SELECT id,contact_name,email,attendance,guest_count,guest_names FROM rsvps WHERE wedding = ? AND sheet_synced_at IS NULL AND id != ? ORDER BY created_at LIMIT 5').bind('sam-tiff',currentId).all();
+  for (const row of pending.results || []) {
+    try { await syncToTracker(db,row); }
+    catch { console.error(JSON.stringify({event:'rsvp_tracker_retry_pending',wedding:'sam-tiff'})); break; }
+  }
+}
+
 export async function onRequest(context) {
   const {request,env}=context;
   if(request.method!=='POST') return new Response(JSON.stringify({error:'Method not allowed.'}),{status:405,headers:{...HEADERS,Allow:'POST'}});
@@ -28,7 +59,15 @@ export async function onRequest(context) {
   try {
     const recent=await env.RSVP_DB.prepare("SELECT COUNT(*) AS total FROM rsvps WHERE wedding = ? AND email = ? AND created_at > strftime('%Y-%m-%dT%H:%M:%SZ','now','-5 minutes')").bind('sam-tiff',email).first();
     if(recent.total>=3) return reply({error:'Please wait a few minutes before submitting another response.'},429);
-    await env.RSVP_DB.prepare('INSERT INTO rsvps (id,wedding,contact_name,email,attendance,guest_count,guest_names) VALUES (?,?,?,?,?,?,?)').bind(crypto.randomUUID(),'sam-tiff',name,email,attendance,guestCount,guestNames).run();
+    const id=crypto.randomUUID();
+    await env.RSVP_DB.prepare('INSERT INTO rsvps (id,wedding,contact_name,email,attendance,guest_count,guest_names) VALUES (?,?,?,?,?,?,?)').bind(id,'sam-tiff',name,email,attendance,guestCount,guestNames).run();
+    try {
+      await syncToTracker(env.RSVP_DB,{id,contact_name:name,email,attendance,guest_count:guestCount,guest_names:guestNames});
+    } catch {
+      console.error(JSON.stringify({event:'rsvp_tracker_delivery_pending',wedding:'sam-tiff'}));
+    }
+    // Retain unsynced backups and retry them on subsequent submissions.
+    if (context.waitUntil) context.waitUntil(retryPending(env.RSVP_DB,id).catch(() => console.error(JSON.stringify({event:'rsvp_tracker_retry_error',wedding:'sam-tiff'}))));
     return reply({ok:true});
   } catch {console.error(JSON.stringify({event:'rsvp_storage_error',wedding:'sam-tiff'}));return reply({error:'Your response could not be saved. Please try again or contact the coordinator.'},503);}
 }
