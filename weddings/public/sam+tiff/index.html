@@ -166,7 +166,7 @@ detail();new ResizeObserver(draw).observe(root.querySelector('.wm-map'));draw();
 <div class="field"><label for="email">Email address</label><input id="email" type="email" name="email" autocomplete="email" maxlength="254" required></div>
 <div class="field"><label for="cell-number">Cell number</label><input id="cell-number" type="tel" name="cellNumber" autocomplete="tel" maxlength="35" inputmode="tel" aria-describedby="cell-hint" required><span class="hint" id="cell-hint">Include your country code if outside the U.S.</span></div>
 <div class="field"><label for="attendance">Will you attend?</label><select id="attendance" name="attendance" required><option value="">Please select</option><option value="yes">Accepts with pleasure</option><option value="no">Declines with regret</option></select></div>
-<fieldset id="attending-fields" hidden disabled><legend>Additional invited guests</legend><p class="hint">Your name is already included. Add only guests named on your invitation, up to six additional guests.</p><div id="guest-list"></div><button class="guest-button" id="add-guest" type="button">+ Add guest</button><p class="hint" id="guest-total" role="status">Total attending: 1</p></fieldset>
+<fieldset id="attending-fields"><legend>Additional invited guests</legend><p class="hint">Your name is already included. Add only guests named on your invitation, up to six additional guests.</p><div id="guest-list"></div><button class="guest-button" id="add-guest" type="button">+ Add guest</button><p class="hint" id="guest-total" role="status">Total attending: 1</p></fieldset>
 <div class="field"><label for="rsvp-note">Note <span class="optional">(optional)</span></label><textarea id="rsvp-note" name="note" maxlength="2000" rows="3"></textarea></div>
 <div class="trap" aria-hidden="true"><label for="website">Website</label><input id="website" name="website" autocomplete="off" tabindex="-1"></div>
 <p class="privacy">Your response will be used by the couple and their wedding coordinator to plan the celebration. Guest responses are not displayed on this website.</p>
@@ -184,7 +184,7 @@ seal.addEventListener('click',()=>{seal.disabled=true;seal.setAttribute('aria-ex
 const form=document.getElementById('rsvp-form'),attendance=document.getElementById('attendance'),fields=document.getElementById('attending-fields'),guestList=document.getElementById('guest-list'),addGuest=document.getElementById('add-guest'),guestTotal=document.getElementById('guest-total'),feedback=document.getElementById('rsvp-feedback'),submit=document.getElementById('submit-rsvp');
 let guestSequence=0;
 function updateGuestSummary(){const total=guestList.children.length;addGuest.disabled=total>=6;guestTotal.textContent='Total attending: '+(total+1)+(total>=6?' — maximum of six additional guests reached.':'');}
-function updateAttendance(){const yes=attendance.value==='yes';fields.hidden=!yes;fields.disabled=!yes;updateGuestSummary();}
+function updateAttendance(){const declining=attendance.value==='no';fields.hidden=declining;fields.disabled=declining;updateGuestSummary();}
 addGuest.addEventListener('click',()=>{
  if(guestList.children.length>=6)return;
  const key=++guestSequence,group=document.createElement('fieldset');group.className='guest-entry';
