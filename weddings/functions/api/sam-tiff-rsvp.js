@@ -5,6 +5,7 @@ const reply = (body,status=200) => new Response(JSON.stringify(body),{status,hea
 // Keep these question IDs aligned with that form; no Google credentials enter the browser.
 const RESPONSE_URL = 'https://docs.google.com/forms/d/e/1FAIpQLScEhFgEdSGnqANyNJZe5dDq8UifIk-bALBCSLJmfc5NTouHQw/formResponse';
 const sheetText = value => /^[=+@-]/.test(value.trimStart()) ? "'" + value : value;
+const planningAnswer = value => ({yes:'Yes',no:'No',unsure:'Not sure yet',not_applicable:'Not attending'})[value] || '';
 async function syncToTracker(db, row) {
   const body = new URLSearchParams({
     'entry.229431896': sheetText(row.email),
@@ -17,6 +18,8 @@ async function syncToTracker(db, row) {
     'entry.2090906309': sheetText(row.last_name || ''),
     'entry.1031146322': sheetText(row.cell_number || ''),
     'entry.1092850186': sheetText(row.note || ''),
+    'entry.1944670770': planningAnswer(row.hotel_stay),
+    'entry.1674255984': planningAnswer(row.shuttle_interest),
     'fvv': '1', 'pageHistory': '0'
   });
   const response = await fetch(RESPONSE_URL, {
@@ -28,7 +31,7 @@ async function syncToTracker(db, row) {
   await db.prepare("UPDATE rsvps SET sheet_synced_at = strftime('%Y-%m-%dT%H:%M:%SZ','now') WHERE id = ?").bind(row.id).run();
 }
 async function retryPending(db, currentId) {
-  const pending = await db.prepare('SELECT id,contact_name,email,attendance,guest_count,guest_names,first_name,last_name,cell_number,note FROM rsvps WHERE wedding = ? AND sheet_synced_at IS NULL AND id != ? ORDER BY created_at LIMIT 5').bind('sam-tiff',currentId).all();
+  const pending = await db.prepare('SELECT id,contact_name,email,attendance,guest_count,guest_names,first_name,last_name,cell_number,note,hotel_stay,shuttle_interest FROM rsvps WHERE wedding = ? AND sheet_synced_at IS NULL AND id != ? ORDER BY created_at LIMIT 5').bind('sam-tiff',currentId).all();
   for (const row of pending.results || []) {
     try { await syncToTracker(db,row); }
     catch { console.error(JSON.stringify({event:'rsvp_tracker_retry_pending',wedding:'sam-tiff'})); break; }
@@ -64,6 +67,9 @@ export async function onRequest(context) {
   if(attendance==='no'&&data.guests.length)return reply({error:'Please remove attending guests when declining.'},400);
   const guests=data.guests.map(guest=>({firstName:clean(guest?.firstName),lastName:clean(guest?.lastName)}));
   if(guests.some(guest=>!validName(guest.firstName)||!validName(guest.lastName)))return reply({error:'Please enter both first and last names for every added guest.'},400);
+  const hotelStay=attendance==='no'?'not_applicable':data.hotelStay;
+  const shuttleInterest=attendance==='no'?'not_applicable':data.shuttleInterest;
+  if(attendance==='yes'&&(!['yes','no','unsure'].includes(hotelStay)||!['yes','no','unsure'].includes(shuttleInterest)))return reply({error:'Please answer the hotel and shuttle planning questions. Refresh the page if they are not visible.'},400);
   const guestCount=attendance==='yes'?1+guests.length:0;
   const guestNames=attendance==='yes'?[name,...guests.map(guest=>guest.firstName+' '+guest.lastName)].join('\n'):'';
   if(!env.RSVP_DB) return reply({error:'RSVPs are temporarily unavailable. Please contact the coordinator.'},503);
@@ -71,9 +77,9 @@ export async function onRequest(context) {
     const recent=await env.RSVP_DB.prepare("SELECT COUNT(*) AS total FROM rsvps WHERE wedding = ? AND email = ? AND created_at > strftime('%Y-%m-%dT%H:%M:%SZ','now','-5 minutes')").bind('sam-tiff',email).first();
     if(recent.total>=3) return reply({error:'Please wait a few minutes before submitting another response.'},429);
     const id=crypto.randomUUID();
-    await env.RSVP_DB.prepare('INSERT INTO rsvps (id,wedding,contact_name,email,attendance,guest_count,guest_names,first_name,last_name,cell_number,note,guests_json) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)').bind(id,'sam-tiff',name,email,attendance,guestCount,guestNames,firstName,lastName,cellNumber,note,JSON.stringify(guests)).run();
+    await env.RSVP_DB.prepare('INSERT INTO rsvps (id,wedding,contact_name,email,attendance,guest_count,guest_names,first_name,last_name,cell_number,note,guests_json,hotel_stay,shuttle_interest) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)').bind(id,'sam-tiff',name,email,attendance,guestCount,guestNames,firstName,lastName,cellNumber,note,JSON.stringify(guests),hotelStay,shuttleInterest).run();
     try {
-      await syncToTracker(env.RSVP_DB,{id,contact_name:name,email,attendance,guest_count:guestCount,guest_names:guestNames,first_name:firstName,last_name:lastName,cell_number:cellNumber,note});
+      await syncToTracker(env.RSVP_DB,{id,contact_name:name,email,attendance,guest_count:guestCount,guest_names:guestNames,first_name:firstName,last_name:lastName,cell_number:cellNumber,note,hotel_stay:hotelStay,shuttle_interest:shuttleInterest});
     } catch {
       console.error(JSON.stringify({event:'rsvp_tracker_delivery_pending',wedding:'sam-tiff'}));
     }
